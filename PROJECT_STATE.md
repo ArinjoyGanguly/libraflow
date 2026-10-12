@@ -10,10 +10,11 @@
 ```
 Phase 1 — Architecture & Planning   COMPLETE
 Phase 2 — Database Layer            COMPLETE
-Phase 3 — Backend Foundation        COMPLETE  <-- finished this session
-Phase 4 — Backend Domain Routes     NOT STARTED
-Phase 5 — Frontend UI               NOT STARTED
-Phase 6 — Integration & End-to-End  NOT STARTED
+Phase 3 — Backend Foundation        COMPLETE
+Phase 4 — Domain CRUD APIs          COMPLETE  <-- finished this session
+Phase 5 — Auth & Loan Transactions  NOT STARTED
+Phase 6 — Frontend UI               NOT STARTED
+Phase 7 — Integration & End-to-End  NOT STARTED
 ```
 
 ---
@@ -53,6 +54,38 @@ Phase 6 — Integration & End-to-End  NOT STARTED
   LIBRARY/server/src/server.ts
   LIBRARY/server/tests/health.test.ts
   LIBRARY/server/tests/middleware.test.ts
+
+### Phase 4 (2026-10-12) — Created
+  LIBRARY/docs/API_DOCUMENTATION.md
+  LIBRARY/server/src/utils/neo4j-helpers.ts
+  LIBRARY/server/src/services/books.service.ts
+  LIBRARY/server/src/controllers/books.controller.ts
+  LIBRARY/server/src/routes/books.routes.ts
+  LIBRARY/server/src/services/authors.service.ts
+  LIBRARY/server/src/controllers/authors.controller.ts
+  LIBRARY/server/src/routes/authors.routes.ts
+  LIBRARY/server/src/services/publishers.service.ts
+  LIBRARY/server/src/controllers/publishers.controller.ts
+  LIBRARY/server/src/routes/publishers.routes.ts
+  LIBRARY/server/src/services/libraries.service.ts
+  LIBRARY/server/src/controllers/libraries.controller.ts
+  LIBRARY/server/src/routes/libraries.routes.ts
+  LIBRARY/server/src/services/members.service.ts
+  LIBRARY/server/src/controllers/members.controller.ts
+  LIBRARY/server/src/routes/members.routes.ts
+  LIBRARY/server/src/services/employees.service.ts
+  LIBRARY/server/src/controllers/employees.controller.ts
+  LIBRARY/server/src/routes/employees.routes.ts
+  LIBRARY/server/src/services/admins.service.ts
+  LIBRARY/server/src/controllers/admins.controller.ts
+  LIBRARY/server/src/routes/admins.routes.ts
+  LIBRARY/server/src/services/requests.service.ts
+  LIBRARY/server/src/controllers/requests.controller.ts
+  LIBRARY/server/src/routes/requests.routes.ts
+  LIBRARY/server/tests/books.test.ts
+  LIBRARY/server/tests/authors_publishers.test.ts
+  LIBRARY/server/tests/users_libraries.test.ts
+  LIBRARY/server/tests/requests.test.ts
 
 No existing files were deleted or overwritten.
 
@@ -288,27 +321,60 @@ be performed by running the scripts in Neo4j Browser using IC01-IC07 in demo-que
 
 ---
 
-## Phase 4 Tasks (Domain APIs & Business Logic)
+## Phase 4 Execution Report (Domain CRUD APIs)
 
-Next tasks for Phase 4:
-1. **Authentication Module**:
+### Execution Summary
+- **Implemented Domains**:
+  - **Books** (`/api/books`): Full CRUD, search, genre filter, pagination, sorting whitelist. Enforces referential integrity by rejecting deletion if active loans exist (`409 Conflict`).
+  - **Authors** (`/api/authors`): Full CRUD, keyword search, pagination, returns authored books.
+  - **Publishers** (`/api/publishers`): Full CRUD, search, pagination, returns published books.
+  - **Libraries** (`/api/libraries`): Full CRUD, returns aggregated book and employee counts; protects library deletion when holdings exist.
+  - **Members** (`/api/members`): Full CRUD, pagination, status filter. Excludes stored `passwordHash` in all responses; prevents deletion if active loans exist.
+  - **Employees** (`/api/employees`): Full CRUD, hashes passwords via `bcryptjs`, links to Library branch, excludes `passwordHash`.
+  - **Administrators** (`/api/admins`): Full CRUD, hashes passwords via `bcryptjs`, excludes `passwordHash`.
+  - **Member Requests** (`/api/requests`): Full CRUD, status filter (`PENDING`, `APPROVED`, `REJECTED`), links member, requested book, and processing employee.
+- **Security & Integrity Adherence**:
+  - **100% Parameterized Cypher**: Every user input passed via parameters (`$param`), preventing Cypher injection.
+  - **Password Secrecy**: Stored bcrypt hashes are filtered using `sanitizeEntity` and explicitly omitted from projection shapes.
+  - **Session Lifecycle**: All database calls use `withSession<T>()` auto-closing sessions in `finally` blocks.
+  - **Referential Integrity**: Books and Members cannot be deleted if active loans exist (`409 Conflict`). Libraries cannot be deleted if books are held.
+  - **Consistent Responses**: All endpoints return `{ success, data, meta }` or `{ success: false, error, details }`.
+
+### Commands Run and Verification Results
+
+1. Production TypeScript Build:
+   - Command: `npm run build`
+   - Result: Exit code 0, `tsc` completed without errors, outputs compiled into `server/dist/`.
+2. Automated Test Suite:
+   - Command: `npm test`
+   - Result: Exit code 0, 6 test suites passed, 33 tests passed in 5.16s:
+     - `tests/health.test.ts`: 4 passed (Liveness probe, alias route, Neo4j connectivity mock success, Neo4j connectivity failure returning 503).
+     - `tests/middleware.test.ts`: 4 passed (404 handler, request validation failure, validation success, custom `AppError` handling).
+     - `tests/books.test.ts`: 6 passed (List, detail, create, validation error, prevent delete on active loan, delete success).
+     - `tests/authors_publishers.test.ts`: 7 passed (Authors CRUD & Publishers CRUD).
+     - `tests/users_libraries.test.ts`: 7 passed (Members password protection & loan deletion guard, Employees password protection, Admins password protection, Libraries deletion holdings guard).
+     - `tests/requests.test.ts`: 5 passed (Requests list, detail, create, update with employee, delete).
+
+---
+
+## Phase 5 Tasks (Authentication & Loan Transactions)
+
+Next tasks for Phase 5:
+1. **Authentication & Authorization**:
    - `auth.service.ts`, `auth.controller.ts`, `auth.routes.ts`, `auth.middleware.ts`
-   - Password hashing and verification using `bcryptjs`
-   - JWT generation and verification with role extraction (`member`, `employee`, `admin`)
-2. **Books Module**:
-   - `books.service.ts`, `books.controller.ts`, `books.routes.ts`
-   - Catalog browsing, keyword search across title/genre/author, book details
-3. **Loans & Transactions Module**:
+   - Unified login (`POST /api/auth/login`) looking up Member, Employee, or Admin by email
+   - Bcrypt password comparison
+   - JWT generation with `{ userId, role, name }`
+   - Route protection middleware (`verifyToken`, `requireRole('employee', 'admin')`)
+2. **Loan Management & Atomic Transactions**:
    - `loans.service.ts`, `loans.controller.ts`, `loans.routes.ts`
-   - Atomic issue transaction: check availableCopies > 0, verify no active duplicate loan, deduct copy, create `(:Loan)`
-   - Atomic return transaction: update status, increment copy, calculate overdue fine using duration and `FINE_RATE_PER_DAY`
-4. **Requests Module**:
-   - `requests.service.ts`, `requests.controller.ts`, `requests.routes.ts`
-   - Member request creation, employee approval/rejection workflows
-5. **Members & Admin Modules**:
-   - Member profiles, admin system statistics aggregation queries
-6. **Frontend UI (Phase 5)**:
-   - React + Vite + Tailwind CSS dashboard and components
+   - Issue book transaction (`POST /api/loans`): atomic copy deduction and loan creation
+   - Return book transaction (`PUT /api/loans/:loanId/return`): atomic copy restoration and fine calculation
+   - Overdue loans query (`GET /api/loans/overdue`)
+3. **Admin Dashboard Analytics**:
+   - `GET /api/admin/stats`: single aggregate graph query for total books, members, active loans, and pending requests
+4. **Phase 6 Frontend Development**:
+   - React + Vite + Tailwind CSS UI implementation
 
 ---
 

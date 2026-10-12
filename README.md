@@ -191,3 +191,23 @@ All responses from LibraFlow follow a standardized JSON schema:
   "details": { ... } // optional
 }
 ```
+
+---
+
+## Domain REST API Endpoints
+
+LibraFlow exposes standardized CRUD APIs across all core entities using parameterized Cypher queries:
+
+| Domain | Base Route | Supported Operations | Key Features |
+| :--- | :--- | :--- | :--- |
+| **Books** | `/api/books` | `GET`, `POST`, `PUT`, `DELETE` | Search, genre filter, pagination, sorting; prevents deletion if active loans exist |
+| **Authors** | `/api/authors` | `GET`, `POST`, `PUT`, `DELETE` | Pagination, keyword search, returns authored books |
+| **Publishers** | `/api/publishers` | `GET`, `POST`, `PUT`, `DELETE` | Pagination, search, returns published books |
+| **Libraries** | `/api/libraries` | `GET`, `POST`, `PUT`, `DELETE` | Aggregated books/staff count; protects holdings referential integrity |
+| **Members** | `/api/members` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted; returns loan history; protects active borrowers |
+| **Employees** | `/api/employees` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted; linked to Library branch |
+| **Admins** | `/api/admins` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted |
+| **Requests** | `/api/requests` | `GET`, `POST`, `PUT`, `DELETE` | Status filtering (`PENDING`, `APPROVED`, `REJECTED`); links member, book, staff |
+
+For complete request/response schemas and curl examples, see [docs/API_DOCUMENTATION.md](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/API_DOCUMENTATION.md).
+

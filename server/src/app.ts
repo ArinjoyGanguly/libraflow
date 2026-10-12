@@ -3,7 +3,17 @@ import cors from 'cors';
 import { config } from './config/env';
 import { requestLogger } from './middleware/logger.middleware';
 import { notFoundHandler, globalErrorHandler } from './middleware/error.middleware';
+
+// Routes
 import healthRoutes from './routes/health.routes';
+import booksRoutes from './routes/books.routes';
+import authorsRoutes from './routes/authors.routes';
+import publishersRoutes from './routes/publishers.routes';
+import librariesRoutes from './routes/libraries.routes';
+import membersRoutes from './routes/members.routes';
+import employeesRoutes from './routes/employees.routes';
+import adminsRoutes from './routes/admins.routes';
+import requestsRoutes from './routes/requests.routes';
 
 const app: Application = express();
 
@@ -26,9 +36,19 @@ if (config.nodeEnv !== 'test') {
   app.use(requestLogger);
 }
 
-// Health check routes mounted at root and /api for consistency
+// Health check routes
 app.use('/health', healthRoutes);
 app.use('/api/health', healthRoutes);
+
+// Domain CRUD API routes
+app.use('/api/books', booksRoutes);
+app.use('/api/authors', authorsRoutes);
+app.use('/api/publishers', publishersRoutes);
+app.use('/api/libraries', librariesRoutes);
+app.use('/api/members', membersRoutes);
+app.use('/api/employees', employeesRoutes);
+app.use('/api/admins', adminsRoutes);
+app.use('/api/requests', requestsRoutes);
 
 // Catch 404 and forward to error handler
 app.use(notFoundHandler);

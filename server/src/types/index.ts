@@ -51,3 +51,260 @@ export interface DatabaseReadinessStatus {
   serverAddress?: string;
   error?: string;
 }
+
+/**
+ * Pagination & Search parameters.
+ */
+export interface PaginationQuery {
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  search?: string;
+  genre?: string;
+  status?: string;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/**
+ * Domain DTOs and Mutation Inputs
+ */
+
+// Author
+export interface AuthorDTO {
+  authorId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  country?: string;
+  books?: { bookId: string; title: string }[];
+}
+
+export interface CreateAuthorInput {
+  authorId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  country?: string;
+}
+
+export interface UpdateAuthorInput {
+  name?: string;
+  email?: string;
+  phone?: string;
+  country?: string;
+}
+
+// Publisher
+export interface PublisherDTO {
+  publisherId: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  books?: { bookId: string; title: string }[];
+}
+
+export interface CreatePublisherInput {
+  publisherId: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
+export interface UpdatePublisherInput {
+  name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
+// Book
+export interface BookDTO {
+  bookId: string;
+  isbn: string;
+  title: string;
+  genre: string;
+  language: string;
+  edition?: string;
+  year: number;
+  totalCopies: number;
+  availableCopies: number;
+  author?: { authorId: string; name: string };
+  publisher?: { publisherId: string; name: string };
+  library?: { libraryId: string; name: string };
+}
+
+export interface CreateBookInput {
+  bookId: string;
+  isbn: string;
+  title: string;
+  genre: string;
+  language: string;
+  edition?: string;
+  year: number;
+  totalCopies: number;
+  authorId?: string;
+  publisherId?: string;
+  libraryId?: string;
+}
+
+export interface UpdateBookInput {
+  isbn?: string;
+  title?: string;
+  genre?: string;
+  language?: string;
+  edition?: string;
+  year?: number;
+  totalCopies?: number;
+  authorId?: string;
+  publisherId?: string;
+  libraryId?: string;
+}
+
+// Library
+export interface LibraryDTO {
+  libraryId: string;
+  name: string;
+  address: string;
+  city: string;
+  phone?: string;
+  email?: string;
+  booksCount?: number;
+  employeesCount?: number;
+}
+
+export interface CreateLibraryInput {
+  libraryId: string;
+  name: string;
+  address: string;
+  city: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface UpdateLibraryInput {
+  name?: string;
+  address?: string;
+  city?: string;
+  phone?: string;
+  email?: string;
+}
+
+// Member
+export interface MemberDTO {
+  memberId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  joinDate: string;
+  status: MemberStatus;
+  role: 'member';
+  activeLoansCount?: number;
+}
+
+export interface CreateMemberInput {
+  memberId: string;
+  name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  address?: string;
+  status?: MemberStatus;
+}
+
+export interface UpdateMemberInput {
+  name?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  address?: string;
+  status?: MemberStatus;
+}
+
+// Employee
+export interface EmployeeDTO {
+  employeeId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  position: string;
+  libraryId: string;
+  role: 'employee';
+}
+
+export interface CreateEmployeeInput {
+  employeeId: string;
+  name: string;
+  email: string;
+  password?: string;
+  phone?: string;
+  position: string;
+  libraryId: string;
+}
+
+export interface UpdateEmployeeInput {
+  name?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  position?: string;
+  libraryId?: string;
+}
+
+// Admin
+export interface AdminDTO {
+  adminId: string;
+  name: string;
+  email: string;
+  role: 'admin';
+}
+
+export interface CreateAdminInput {
+  adminId: string;
+  name: string;
+  email: string;
+  password?: string;
+}
+
+export interface UpdateAdminInput {
+  name?: string;
+  email?: string;
+  password?: string;
+}
+
+// Request
+export interface RequestDTO {
+  requestId: string;
+  requestDate: string;
+  status: RequestStatus;
+  notes?: string;
+  member?: { memberId: string; name: string; email: string };
+  book?: { bookId: string; title: string; isbn: string };
+  processedBy?: { employeeId: string; name: string };
+}
+
+export interface CreateRequestInput {
+  requestId: string;
+  memberId: string;
+  bookId: string;
+  notes?: string;
+}
+
+export interface UpdateRequestInput {
+  status?: RequestStatus;
+  notes?: string;
+  employeeId?: string; // employee who approves or rejects
+}
