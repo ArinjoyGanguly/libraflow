@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { MembersController } from '../controllers/members.controller';
+import { LoansController } from '../controllers/loans.controller';
 import { validateRequest } from '../middleware/validate.middleware';
 
 const router = Router();
@@ -7,8 +8,12 @@ const router = Router();
 // GET /api/members - list
 router.get('/', MembersController.listMembers);
 
+// GET /api/members/:memberId/loans - member loan history
+router.get('/:memberId/loans', LoansController.getMemberLoans);
+
 // GET /api/members/:memberId - detail
 router.get('/:memberId', MembersController.getMemberById);
+
 
 // POST /api/members - create
 router.post(

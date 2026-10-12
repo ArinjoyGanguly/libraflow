@@ -208,6 +208,8 @@ LibraFlow exposes standardized CRUD APIs across all core entities using paramete
 | **Employees** | `/api/employees` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted; linked to Library branch |
 | **Admins** | `/api/admins` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted |
 | **Requests** | `/api/requests` | `GET`, `POST`, `PUT`, `DELETE` | Status filtering (`PENDING`, `APPROVED`, `REJECTED`); links member, book, staff |
+| **Loans** | `/api/loans` | `POST /issue`, `POST /:id/return`, `GET /`, `GET /:id`, `GET /overdue`, `GET /members/:id/loans` | ACID transaction borrowing & returns, automatic copy count locking, overdue fine calculation |
 
 For complete request/response schemas and curl examples, see [docs/API_DOCUMENTATION.md](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/API_DOCUMENTATION.md).
+
 

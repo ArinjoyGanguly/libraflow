@@ -308,3 +308,35 @@ export interface UpdateRequestInput {
   notes?: string;
   employeeId?: string; // employee who approves or rejects
 }
+
+// Loan
+export interface LoanDTO {
+  loanId: string;
+  issueDate: string;
+  dueDate: string;
+  returnDate?: string | null;
+  status: LoanStatus;
+  fineAmount: number;
+  member?: { memberId: string; name: string; email: string };
+  book?: { bookId: string; title: string; isbn: string };
+  issuedBy?: { employeeId: string; name: string };
+}
+
+export interface OverdueLoanDTO extends LoanDTO {
+  daysOverdue: number;
+  calculatedFine: number;
+}
+
+export interface IssueBookInput {
+  loanId?: string;
+  memberId: string;
+  bookId: string;
+  employeeId?: string;
+  loanPeriodDays?: number;
+}
+
+export interface ReturnBookInput {
+  returnDate?: string;
+  fineRatePerDay?: number;
+}
+

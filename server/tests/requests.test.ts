@@ -79,6 +79,40 @@ describe('Member Requests API (Isolated Unit Tests with Service Mocking)', () =>
     expect(res.body.data.processedBy.employeeId).toBe('E01');
   });
 
+  it('PUT /api/requests/:requestId should reject invalid status transitions with 400 Bad Request', async () => {
+    const { BadRequestError } = require('../src/utils/errors');
+    jest.spyOn(RequestsService, 'updateRequest').mockRejectedValueOnce(
+      new BadRequestError("Invalid status transition: request 'REQ001' is already APPROVED and cannot be transitioned to PENDING")
+    );
+
+    const res = await request(app)
+      .put('/api/requests/REQ001')
+      .send({ status: 'PENDING' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('Invalid status transition');
+  });
+
+  it('POST /api/requests should return 404 if member or book does not exist', async () => {
+    const { NotFoundError } = require('../src/utils/errors');
+    jest.spyOn(RequestsService, 'createRequest').mockRejectedValueOnce(
+      new NotFoundError("Member with ID 'M999' not found")
+    );
+
+    const res = await request(app)
+      .post('/api/requests')
+      .send({
+        requestId: 'REQ999',
+        memberId: 'M999',
+        bookId: 'B001',
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain("Member with ID 'M999' not found");
+  });
+
   it('DELETE /api/requests/:requestId should delete a request', async () => {
     jest.spyOn(RequestsService, 'deleteRequest').mockResolvedValueOnce(undefined);
 
@@ -87,3 +121,4 @@ describe('Member Requests API (Isolated Unit Tests with Service Mocking)', () =>
     expect(res.body.data.message).toContain('successfully deleted');
   });
 });
+

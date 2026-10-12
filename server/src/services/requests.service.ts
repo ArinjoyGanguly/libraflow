@@ -186,9 +186,31 @@ export class RequestsService {
         throw new NotFoundError(`Request with ID '${requestId}' not found`);
       }
 
+      const currentReq = toNative(checkRes.records[0].get('r'));
       const validStatuses = ['PENDING', 'APPROVED', 'REJECTED'];
-      if (input.status && !validStatuses.includes(input.status)) {
-        throw new BadRequestError(`Invalid status '${input.status}'. Allowed: ${validStatuses.join(', ')}`);
+
+      if (input.status) {
+        if (!validStatuses.includes(input.status)) {
+          throw new BadRequestError(`Invalid status '${input.status}'. Allowed: ${validStatuses.join(', ')}`);
+        }
+
+        // Prevent modifying already processed requests (e.g. APPROVED or REJECTED)
+        if (currentReq.status !== 'PENDING' && currentReq.status !== input.status) {
+          throw new BadRequestError(
+            `Invalid status transition: request '${requestId}' is already ${currentReq.status} and cannot be transitioned to ${input.status}`
+          );
+        }
+      }
+
+      // If processed by employee, verify employee exists
+      if (input.employeeId) {
+        const empRes = await session.run(
+          'MATCH (e:Employee {employeeId: $employeeId}) RETURN e',
+          { employeeId: input.employeeId }
+        );
+        if (empRes.records.length === 0) {
+          throw new NotFoundError(`Employee with ID '${input.employeeId}' not found`);
+        }
       }
 
       const updateCypher = `
@@ -204,22 +226,14 @@ export class RequestsService {
         notes: input.notes !== undefined ? input.notes : null,
       });
 
-      // If processed by employee
       if (input.employeeId) {
-        const empRes = await session.run(
-          'MATCH (e:Employee {employeeId: $employeeId}) RETURN e',
-          { employeeId: input.employeeId }
-        );
-        if (empRes.records.length === 0) {
-          throw new NotFoundError(`Employee with ID '${input.employeeId}' not found`);
-        }
-
         await session.run(
           `MATCH (e:Employee {employeeId: $employeeId}), (r:Request {requestId: $requestId})
            MERGE (e)-[:PROCESSED]->(r)`,
           { employeeId: input.employeeId, requestId }
         );
       }
+
 
       return RequestsService.getRequestById(requestId);
     }, { accessMode: 'WRITE' });

@@ -11,8 +11,8 @@
 Phase 1 — Architecture & Planning   COMPLETE
 Phase 2 — Database Layer            COMPLETE
 Phase 3 — Backend Foundation        COMPLETE
-Phase 4 — Domain CRUD APIs          COMPLETE  <-- finished this session
-Phase 5 — Auth & Loan Transactions  NOT STARTED
+Phase 4 — Domain CRUD APIs          COMPLETE
+Phase 5 — Transactional Loans       COMPLETE  <-- finished this session
 Phase 6 — Frontend UI               NOT STARTED
 Phase 7 — Integration & End-to-End  NOT STARTED
 ```
@@ -86,6 +86,12 @@ Phase 7 — Integration & End-to-End  NOT STARTED
   LIBRARY/server/tests/authors_publishers.test.ts
   LIBRARY/server/tests/users_libraries.test.ts
   LIBRARY/server/tests/requests.test.ts
+
+### Phase 5 (2026-10-13) — Created
+  LIBRARY/server/src/services/loans.service.ts
+  LIBRARY/server/src/controllers/loans.controller.ts
+  LIBRARY/server/src/routes/loans.routes.ts
+  LIBRARY/server/tests/loans.test.ts
 
 No existing files were deleted or overwritten.
 
@@ -357,24 +363,68 @@ be performed by running the scripts in Neo4j Browser using IC01-IC07 in demo-que
 
 ---
 
-## Phase 5 Tasks (Authentication & Loan Transactions)
+## Phase 5 Execution Report (Transactional Loans & Member Requests)
 
-Next tasks for Phase 5:
-1. **Authentication & Authorization**:
-   - `auth.service.ts`, `auth.controller.ts`, `auth.routes.ts`, `auth.middleware.ts`
-   - Unified login (`POST /api/auth/login`) looking up Member, Employee, or Admin by email
-   - Bcrypt password comparison
-   - JWT generation with `{ userId, role, name }`
-   - Route protection middleware (`verifyToken`, `requireRole('employee', 'admin')`)
-2. **Loan Management & Atomic Transactions**:
-   - `loans.service.ts`, `loans.controller.ts`, `loans.routes.ts`
-   - Issue book transaction (`POST /api/loans`): atomic copy deduction and loan creation
-   - Return book transaction (`PUT /api/loans/:loanId/return`): atomic copy restoration and fine calculation
-   - Overdue loans query (`GET /api/loans/overdue`)
-3. **Admin Dashboard Analytics**:
-   - `GET /api/admin/stats`: single aggregate graph query for total books, members, active loans, and pending requests
-4. **Phase 6 Frontend Development**:
-   - React + Vite + Tailwind CSS UI implementation
+### Execution Summary
+- **Implemented Loan Endpoints**:
+  - `POST /api/loans/issue` & `POST /api/loans`: Atomic borrowing transaction.
+    - Validates member exists and status is `ACTIVE` (blocks `SUSPENDED` members with `403 Forbidden`).
+    - Validates book exists and `availableCopies > 0` (rejects with `400 Bad Request` if depleted).
+    - Prevents member from borrowing the same book concurrently (`409 Conflict`).
+    - Acquires Neo4j node write lock via `executeWrite`, safely decrementing `availableCopies` and creating `(:Loan)` node.
+    - Connects `(:Member)-[:BORROWED]->(:Loan)`, `(:Loan)-[:FOR_BOOK]->(:Book)`, and `(:Employee)-[:ISSUED]->(:Loan)`.
+  - `POST /api/loans/:loanId/return` & `PUT /api/loans/:loanId/return`: Atomic return transaction.
+    - Validates loan exists and is `ACTIVE` or `OVERDUE` (rejects duplicate return with `400 Bad Request`).
+    - Atomically updates status to `RETURNED`, sets `returnDate`, computes overdue fine (`days * FINE_RATE_PER_DAY`), and increments `book.availableCopies`.
+    - Preserves all historical loan records and relationship metadata.
+  - `GET /api/loans`: List all loans with filters (`status`, `memberId`, `bookId`) and pagination.
+  - `GET /api/loans/:loanId`: Single loan details with related member, book, and issuing staff.
+  - `GET /api/loans/overdue`: Overdue loans probe with live computed days overdue and fine amount.
+  - `GET /api/members/:memberId/loans`: Member borrowing history endpoint.
+- **Member Requests Refinement**:
+  - Validated status transition lifecycle: `PENDING` -> `APPROVED` or `REJECTED`.
+  - Rejects attempts to transition already processed (`APPROVED`/`REJECTED`) requests (`400 Bad Request`).
+  - Records processing employee via `(:Employee)-[:PROCESSED]->(:Request)`.
+- **Database Concurrency & Locking Architecture**:
+  - All mutating borrowing and return operations execute inside `withTransaction` using official `session.executeWrite(async tx => ...)`.
+  - Modifying `b.availableCopies` inside the transaction forces Neo4j to take an exclusive write lock on the `(:Book)` node.
+  - Concurrent issue requests on the same book are serialized at the database engine level; the second transaction re-evaluates `availableCopies > 0` and fails cleanly if zero copies remain.
+
+### Commands Run and Verification Results
+
+1. Production TypeScript Build:
+   - Command: `npm run build`
+   - Result: Exit code 0, `tsc` completed with zero errors, outputs compiled into `server/dist/`.
+2. Automated Test Suite:
+   - Command: `npm test`
+   - Result: Exit code 0, 7 test suites passed, 46 tests passed in 4.69s:
+     - `tests/health.test.ts`: 4 passed
+     - `tests/middleware.test.ts`: 4 passed
+     - `tests/books.test.ts`: 6 passed
+     - `tests/authors_publishers.test.ts`: 7 passed
+     - `tests/users_libraries.test.ts`: 7 passed
+     - `tests/requests.test.ts`: 7 passed (including lifecycle transition guards)
+     - `tests/loans.test.ts`: 11 passed (Issue book, 0 copies error, duplicate active loan error, missing entity 404, return book, double return rejection, overdue filtering, member loan history, pagination, transaction rollback on failure)
+
+---
+
+## Phase 6 Tasks (Frontend UI Implementation)
+
+Next tasks for Phase 6:
+1. **Frontend Project Setup**:
+   - Initialize `client/` using Vite + React + TypeScript + Tailwind CSS v3
+   - Install Lucide icons, Axios/Fetch wrapper, and React Router DOM v6
+2. **Design System & Layout**:
+   - Modern slate/indigo dark theme with responsive sidebar and header
+   - Role-aware navigation (Member, Employee, Admin views)
+3. **Core Interactive Views**:
+   - Catalog browsing & book details with real-time available copies indicator
+   - Member borrowing dashboard & request submission modal
+   - Employee desk: issue book form, return book modal with fine display, request approval workflow
+   - Admin stats panel (total books, members, active loans, pending requests)
+4. **Phase 7 Integration**:
+   - End-to-end integration and smoke tests connecting React SPA to Express API and live Neo4j
+
 
 ---
 

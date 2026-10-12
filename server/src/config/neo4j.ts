@@ -1,4 +1,4 @@
-import neo4j, { Driver, Session, SessionConfig, session as sessionMode } from 'neo4j-driver';
+import neo4j, { Driver, Session, SessionConfig, session as sessionMode, ManagedTransaction } from 'neo4j-driver';
 import { config } from './env';
 
 let driverInstance: Driver | null = null;
@@ -59,6 +59,29 @@ export const withSession = async <T>(
     await session.close();
   }
 };
+
+/**
+ * Executes work within an ACID transaction (using session.executeWrite or session.executeRead).
+ * Handles automatic rollback on failure and safe session closure in a finally block.
+ */
+export const withTransaction = async <T>(
+  work: (tx: ManagedTransaction) => Promise<T>,
+  options?: {
+    accessMode?: 'READ' | 'WRITE';
+    database?: string;
+  }
+): Promise<T> => {
+  const session = getSession(options?.accessMode || 'WRITE', options?.database);
+  try {
+    if (options?.accessMode === 'READ') {
+      return await session.executeRead((tx) => work(tx));
+    }
+    return await session.executeWrite((tx) => work(tx));
+  } finally {
+    await session.close();
+  }
+};
+
 
 /**
  * Verifies connectivity to the Neo4j instance.

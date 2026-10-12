@@ -245,3 +245,112 @@ Update request status and associate processing employee:
 
 ### `DELETE /api/requests/:requestId`
 Delete request node.
+
+---
+
+## 10. Loans & Borrowing Transactions API (`/api/loans`)
+
+### `POST /api/loans/issue` (or `POST /api/loans`)
+Atomically issue a book to a member.
+- **Transactional Safety**:
+  - Validates member exists and status is `ACTIVE` (rejects `SUSPENDED` members with `403 Forbidden`).
+  - Validates book exists and `availableCopies > 0` (rejects with `400 Bad Request` if 0 copies).
+  - Validates member does not already have an active loan for the same book (rejects with `409 Conflict`).
+  - Executes inside a Neo4j write transaction (`executeWrite`), acquiring an exclusive lock on the `Book` node to prevent race conditions.
+  - Atomically sets `b.availableCopies = b.availableCopies - 1`.
+  - Creates `(:Loan)` node with `status='ACTIVE'`, `issueDate=date()`, `dueDate=date()+duration({days: loanPeriodDays})`, `fineAmount=0.0`.
+  - Creates relationships: `(member)-[:BORROWED]->(loan)`, `(loan)-[:FOR_BOOK]->(book)`, `(employee)-[:ISSUED]->(loan)`.
+- **Request Body**:
+  ```json
+  {
+    "memberId": "M001",
+    "bookId": "B001",
+    "employeeId": "E01",
+    "loanPeriodDays": 14
+  }
+  ```
+- **Response (`201 Created`)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "loanId": "L008_M1A2B3C",
+      "issueDate": "2026-10-13",
+      "dueDate": "2026-10-27",
+      "returnDate": null,
+      "status": "ACTIVE",
+      "fineAmount": 0,
+      "member": { "memberId": "M001", "name": "Alice Kumar", "email": "alice.kumar@example.com" },
+      "book": { "bookId": "B001", "title": "The Great Gatsby", "isbn": "978-0743273565" },
+      "issuedBy": { "employeeId": "E01", "name": "Rajesh Sharma" }
+    }
+  }
+  ```
+
+### `POST /api/loans/:loanId/return` (or `PUT /api/loans/:loanId/return`)
+Atomically return a borrowed book.
+- **Transactional Safety**:
+  - Validates loan exists and is `ACTIVE` or `OVERDUE` (rejects already returned loans with `400 Bad Request`).
+  - Atomically sets `loan.status = 'RETURNED'`.
+  - Sets `loan.returnDate = date()`.
+  - Calculates overdue fine: `duration.between(loan.dueDate, returnDate).days * fineRatePerDay` (default $2/day).
+  - Atomically restores `book.availableCopies = book.availableCopies + 1`.
+  - Preserves full loan history.
+- **Request Body**:
+  ```json
+  {
+    "returnDate": "2026-10-20",
+    "fineRatePerDay": 2
+  }
+  ```
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "loanId": "L001",
+      "issueDate": "2026-10-12",
+      "dueDate": "2026-10-26",
+      "returnDate": "2026-10-20",
+      "status": "RETURNED",
+      "fineAmount": 0,
+      "member": { "memberId": "M001", "name": "Alice Kumar" },
+      "book": { "bookId": "B001", "title": "The Great Gatsby" }
+    }
+  }
+  ```
+
+### `GET /api/loans`
+List all loans with pagination and filters.
+- **Query Parameters**:
+  - `status`: `ACTIVE`, `RETURNED`, or `OVERDUE`
+  - `memberId`: Filter by member
+  - `bookId`: Filter by book
+  - `page`, `limit`: Pagination controls
+
+### `GET /api/loans/overdue`
+Retrieve all overdue active loans with computed overdue days and fine amounts.
+- **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "loanId": "L004",
+        "status": "OVERDUE",
+        "dueDate": "2026-09-15",
+        "daysOverdue": 28,
+        "calculatedFine": 56,
+        "member": { "memberId": "M003", "name": "Carol Danvers" },
+        "book": { "bookId": "B003", "title": "The Immortals of Meluha" }
+      }
+    ]
+  }
+  ```
+
+### `GET /api/loans/:loanId`
+Retrieve full details of a specific loan.
+
+### `GET /api/members/:memberId/loans`
+Retrieve the complete historical and active borrowing records for a specific member.
+
