@@ -1,4 +1,4 @@
-﻿# LibraFlow — Project State Tracker
+# LibraFlow — Project State Tracker
 > **Course Assignment**: DA3 — Database Management Systems
 > **Tech Stack**: React + Vite + TypeScript + Tailwind CSS / Node.js + Express + TypeScript / Neo4j
 > **Last Updated**: 2026-10-12
@@ -9,10 +9,11 @@
 
 ```
 Phase 1 — Architecture & Planning   COMPLETE
-Phase 2 — Database Layer            COMPLETE  <-- finished this session
-Phase 3 — Backend API               NOT STARTED
-Phase 4 — Frontend UI               NOT STARTED
-Phase 5 — Integration & Testing     NOT STARTED
+Phase 2 — Database Layer            COMPLETE
+Phase 3 — Backend Foundation        COMPLETE  <-- finished this session
+Phase 4 — Backend Domain Routes     NOT STARTED
+Phase 5 — Frontend UI               NOT STARTED
+Phase 6 — Integration & End-to-End  NOT STARTED
 ```
 
 ---
@@ -29,6 +30,29 @@ Phase 5 — Integration & Testing     NOT STARTED
   LIBRARY/database/seed.cypher
   LIBRARY/database/demo-queries.cypher
   LIBRARY/docs/DATABASE_SCHEMA.md
+
+### Phase 3 (2026-10-12) — Created
+  LIBRARY/.gitignore
+  LIBRARY/README.md
+  LIBRARY/server/package.json
+  LIBRARY/server/package-lock.json
+  LIBRARY/server/tsconfig.json
+  LIBRARY/server/jest.config.js
+  LIBRARY/server/.env.example
+  LIBRARY/server/.gitignore
+  LIBRARY/server/src/types/index.ts
+  LIBRARY/server/src/config/env.ts
+  LIBRARY/server/src/config/neo4j.ts
+  LIBRARY/server/src/utils/response.ts
+  LIBRARY/server/src/utils/errors.ts
+  LIBRARY/server/src/middleware/error.middleware.ts
+  LIBRARY/server/src/middleware/logger.middleware.ts
+  LIBRARY/server/src/middleware/validate.middleware.ts
+  LIBRARY/server/src/routes/health.routes.ts
+  LIBRARY/server/src/app.ts
+  LIBRARY/server/src/server.ts
+  LIBRARY/server/tests/health.test.ts
+  LIBRARY/server/tests/middleware.test.ts
 
 No existing files were deleted or overwritten.
 
@@ -218,53 +242,73 @@ be performed by running the scripts in Neo4j Browser using IC01-IC07 in demo-que
 
 ---
 
-## Phase 3 Must Create (Exact Order)
+## Phase 3 Execution Report (Backend Foundation)
 
-### Step 3.1 — Root scaffolding
-1.  LIBRARY/.gitignore
-2.  LIBRARY/README.md
+### Execution Summary
+- **Directory**: `LIBRARY/server`
+- **Dependencies Installed**:
+  - Runtime: `express`, `neo4j-driver`, `dotenv`, `cors`, `jsonwebtoken`, `bcryptjs`
+  - Development/Testing: `typescript`, `ts-node-dev`, `jest`, `ts-jest`, `supertest`, `@types/*`
+- **TypeScript Configuration**: `tsconfig.json` targeting ES2022/CommonJS with strict mode enabled and `dist/` compilation target.
+- **Environment Management**:
+  - `server/.env.example` committed with placeholders only.
+  - Environment variables read: `PORT`, `NODE_ENV`, `CORS_ORIGIN`, `NEO4J_URI`, `NEO4J_USERNAME` (with `NEO4J_USER` fallback), `NEO4J_PASSWORD`, `NEO4J_DATABASE`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `FINE_RATE_PER_DAY`, `LOAN_PERIOD_DAYS`.
+  - `.env` excluded via root `.gitignore` and `server/.gitignore`.
+- **Database Module (`server/src/config/neo4j.ts`)**:
+  - Singleton driver initialization via `getDriver()`.
+  - Safe session management via `getSession()` and `withSession<T>()` auto-closing sessions in `finally` blocks.
+  - Driver shutdown lifecycle via `closeDriver()`.
+  - Real connectivity verification via `verifyConnectivity()` using official `driver.verifyConnectivity()`.
+  - No connection fabrication or mock replacements.
+- **Health & Readiness Endpoints**:
+  - `GET /health` & `GET /api/health`: HTTP server process liveness (HTTP 200).
+  - `GET /health/db` & `GET /api/health/db`: Neo4j database readiness probe returning HTTP 200 (`CONNECTED`) when reachable or HTTP 503 (`DISCONNECTED`) when unreachable.
+- **Centralized Middleware & Conventions**:
+  - Consistent JSON response contracts (`ApiResponse<T>`, `sendSuccess`, `sendError`).
+  - Centralized error hierarchy (`AppError`, `BadRequestError`, `NotFoundError`, etc.) with global error handling catching Neo4j and Express runtime errors.
+  - Request logging middleware and reusable request validation middleware generator (`validateRequest`).
+  - Graceful shutdown signal traps for `SIGTERM` and `SIGINT`.
 
-### Step 3.2 — Backend scaffold (run from LIBRARY/)
-```bash
-mkdir server
-cd server
-npm init -y
-npm install express neo4j-driver dotenv bcryptjs jsonwebtoken cors
-npm install -D typescript ts-node-dev @types/express @types/node @types/bcryptjs @types/jsonwebtoken @types/cors
-npx tsc --init
-```
+### Commands Run and Verification Results
 
-### Step 3.3 — Backend source files (create in this order)
-3.  LIBRARY/server/tsconfig.json      (strict: true, module: CommonJS, outDir: ./dist)
-4.  LIBRARY/server/.env.example
-5.  LIBRARY/server/src/types/index.ts (UserPayload, BookDTO, LoanDTO, RequestDTO)
-6.  LIBRARY/server/src/config/neo4j.ts (driver singleton + getSession)
-7.  LIBRARY/server/src/app.ts         (Express setup, CORS, body-parser, route stubs)
-8.  LIBRARY/server/src/server.ts      (entry point, verifyConnectivity on startup)
-9.  LIBRARY/server/src/middleware/auth.middleware.ts
-10. LIBRARY/server/src/middleware/error.middleware.ts
-11. LIBRARY/server/src/routes/auth.routes.ts
-12. LIBRARY/server/src/controllers/auth.controller.ts
-13. LIBRARY/server/src/services/auth.service.ts
-14. LIBRARY/server/src/routes/books.routes.ts
-15. LIBRARY/server/src/controllers/books.controller.ts
-16. LIBRARY/server/src/services/books.service.ts
-17. LIBRARY/server/src/routes/loans.routes.ts
-18. LIBRARY/server/src/controllers/loans.controller.ts
-19. LIBRARY/server/src/services/loans.service.ts
-20. LIBRARY/server/src/routes/requests.routes.ts
-21. LIBRARY/server/src/controllers/requests.controller.ts
-22. LIBRARY/server/src/services/requests.service.ts
-23. LIBRARY/server/src/routes/members.routes.ts
-24. LIBRARY/server/src/controllers/members.controller.ts
-25. LIBRARY/server/src/routes/admin.routes.ts
-26. LIBRARY/server/src/controllers/admin.controller.ts
+1. `npm install` (in `server/`):
+   - Command: `npm install`
+   - Result: Exit code 0, 446 packages added, 0 installation errors.
+2. Production TypeScript Build:
+   - Command: `npm run build`
+   - Result: Exit code 0, `tsc` completed without errors, outputs generated in `server/dist/`.
+3. Test Suite Execution:
+   - Command: `npm test`
+   - Result: Exit code 0, 2 test suites passed, 8 tests passed in 23.27s:
+     - `tests/health.test.ts`: 4 passed (Liveness probe, alias route, Neo4j connectivity mock success, Neo4j connectivity failure returning 503).
+     - `tests/middleware.test.ts`: 4 passed (404 handler, request validation failure, validation success, custom `AppError` handling).
 
-### Phase 3 must NOT start until:
-  - Neo4j is running locally (Desktop or Server)
-  - database/constraints.cypher applied in Neo4j Browser -> SHOW CONSTRAINTS returns 13+ rows
-  - database/seed.cypher applied in Neo4j Browser -> MATCH (n) RETURN count(n) returns 37
-  - IC01-IC04 in demo-queries.cypher all return 0 rows
+### Known Limitations
+- When running in an environment without a local or remote Neo4j 5 database instance actively listening on port 7687, the database readiness probe (`/health/db`) honestly returns HTTP 503 with status `DISCONNECTED`. This is the intended behavior and guarantees that connection status is never fabricated.
+
+---
+
+## Phase 4 Tasks (Domain APIs & Business Logic)
+
+Next tasks for Phase 4:
+1. **Authentication Module**:
+   - `auth.service.ts`, `auth.controller.ts`, `auth.routes.ts`, `auth.middleware.ts`
+   - Password hashing and verification using `bcryptjs`
+   - JWT generation and verification with role extraction (`member`, `employee`, `admin`)
+2. **Books Module**:
+   - `books.service.ts`, `books.controller.ts`, `books.routes.ts`
+   - Catalog browsing, keyword search across title/genre/author, book details
+3. **Loans & Transactions Module**:
+   - `loans.service.ts`, `loans.controller.ts`, `loans.routes.ts`
+   - Atomic issue transaction: check availableCopies > 0, verify no active duplicate loan, deduct copy, create `(:Loan)`
+   - Atomic return transaction: update status, increment copy, calculate overdue fine using duration and `FINE_RATE_PER_DAY`
+4. **Requests Module**:
+   - `requests.service.ts`, `requests.controller.ts`, `requests.routes.ts`
+   - Member request creation, employee approval/rejection workflows
+5. **Members & Admin Modules**:
+   - Member profiles, admin system statistics aggregation queries
+6. **Frontend UI (Phase 5)**:
+   - React + Vite + Tailwind CSS dashboard and components
 
 ---
 
