@@ -9,7 +9,7 @@
 
 ```
 Phase 1 — Architecture & Planning   COMPLETE
-Phase 2 — Scaffolding & Database    NOT STARTED
+Phase 2 — Database Layer            COMPLETE  <-- finished this session
 Phase 3 — Backend API               NOT STARTED
 Phase 4 — Frontend UI               NOT STARTED
 Phase 5 — Integration & Testing     NOT STARTED
@@ -17,22 +17,27 @@ Phase 5 — Integration & Testing     NOT STARTED
 
 ---
 
-## Workspace Audit (Phase 1)
+## Workspace Audit
 
-The LIBRARY folder was completely empty when Phase 1 began.
-No existing files were deleted or overwritten.
-
-Files created by Phase 1:
+### Phase 1 (2026-10-12) — Created
   LIBRARY/PROJECT_STATE.md
   LIBRARY/docs/ARCHITECTURE.md
   LIBRARY/docs/IMPLEMENTATION_PLAN.md
+
+### Phase 2 (2026-10-12) — Created
+  LIBRARY/database/constraints.cypher
+  LIBRARY/database/seed.cypher
+  LIBRARY/database/demo-queries.cypher
+  LIBRARY/docs/DATABASE_SCHEMA.md
+
+No existing files were deleted or overwritten.
 
 ---
 
 ## Key Architectural Decisions
 
 | # | Decision | Rationale |
-|---|----------|-----------|
+|---|----------|-----------| 
 | 1 | Neo4j ONLY (no SQL) | Assignment requirement; graph model is natural for borrowing histories |
 | 2 | Loan as a NODE (not a relationship) | Allows per-loan-ID tracking, multiple loans, fine storage |
 | 3 | Request as a NODE with status property | Mirrors Oracle DA2 Send_Request; status: PENDING/APPROVED/REJECTED |
@@ -41,6 +46,24 @@ Files created by Phase 1:
 | 6 | Three roles: Member, Employee, Admin | Directly maps to DA2 entities |
 | 7 | availableCopies counter on Book node | Avoids expensive COUNT() on every borrow check |
 | 8 | Tailwind CSS v3 | More stable than v4; easier PostCSS setup for students |
+| 9 | database/ folder separate from server/ | Scripts apply directly to Neo4j Browser or Cypher Shell — no app needed |
+| 10 | MERGE for all seed statements | Re-running seed.cypher is idempotent — no duplicate nodes |
+
+---
+
+## DA2 Entity Mapping (All 8 Preserved)
+
+| DA2 Oracle Table | Neo4j Node Label | Seed IDs |
+|-----------------|-----------------|---------|
+| Author | (:Author) | A101, A102, A103 (DA2) + A104, A105 |
+| Publisher | (:Publisher) | PUB01, PUB02, PUB03 (DA2) + PUB04 |
+| Books | (:Book) | B001, B002, B003 (DA2) + B004, B005 |
+| Library | (:Library) | LIB01, LIB02 |
+| Member | (:Member) | M001, M002 (DA2) + M003, M004 |
+| Employee | (:Employee) | E01, E02 (DA2) |
+| Admin | (:Admin) | AD01, AD02 (DA2) |
+| Send_Request | (:Request) | REQ001–REQ006 |
+| (new) | (:Loan) | L001–L007 |
 
 ---
 
@@ -48,7 +71,17 @@ Files created by Phase 1:
 
 ```
 LIBRARY/
-|-- client/
+|-- database/                        COMPLETE
+|   |-- constraints.cypher
+|   |-- seed.cypher
+|   \-- demo-queries.cypher
+|
+|-- docs/                            COMPLETE
+|   |-- ARCHITECTURE.md
+|   |-- IMPLEMENTATION_PLAN.md
+|   \-- DATABASE_SCHEMA.md
+|
+|-- client/                          NOT STARTED (Phase 4)
 |   |-- index.html
 |   |-- package.json
 |   |-- tsconfig.json
@@ -61,29 +94,17 @@ LIBRARY/
 |       |-- index.css
 |       |-- assets/
 |       |-- components/
-|       |   |-- common/     (Button, Input, Modal, Badge, Spinner, Table)
-|       |   |-- layout/     (Navbar, Sidebar, Footer, PageWrapper)
-|       |   \-- features/   (BookCard, LoanRow, RequestCard, UserRow)
+|       |   |-- common/
+|       |   |-- layout/
+|       |   \-- features/
 |       |-- context/
 |       |   \-- AuthContext.tsx
 |       |-- hooks/
-|       |   |-- useAuth.ts
-|       |   \-- useApi.ts
 |       |-- pages/
-|       |   |-- LoginPage.tsx
-|       |   |-- DashboardPage.tsx
-|       |   |-- BooksPage.tsx
-|       |   |-- BookDetailPage.tsx
-|       |   |-- LoansPage.tsx
-|       |   |-- RequestsPage.tsx
-|       |   |-- MembersPage.tsx
-|       |   \-- AdminPage.tsx
 |       |-- services/
-|       |   \-- api.ts
 |       \-- types/
-|           \-- index.ts
 |
-|-- server/
+|-- server/                          NOT STARTED (Phase 3)
 |   |-- package.json
 |   |-- tsconfig.json
 |   |-- .env.example
@@ -93,36 +114,10 @@ LIBRARY/
 |       |-- config/
 |       |   \-- neo4j.ts
 |       |-- middleware/
-|       |   |-- auth.middleware.ts
-|       |   \-- error.middleware.ts
 |       |-- routes/
-|       |   |-- auth.routes.ts
-|       |   |-- books.routes.ts
-|       |   |-- members.routes.ts
-|       |   |-- loans.routes.ts
-|       |   |-- requests.routes.ts
-|       |   \-- admin.routes.ts
 |       |-- controllers/
-|       |   |-- auth.controller.ts
-|       |   |-- books.controller.ts
-|       |   |-- members.controller.ts
-|       |   |-- loans.controller.ts
-|       |   |-- requests.controller.ts
-|       |   \-- admin.controller.ts
 |       |-- services/
-|       |   |-- auth.service.ts
-|       |   |-- books.service.ts
-|       |   |-- loans.service.ts
-|       |   \-- requests.service.ts
-|       |-- cypher/
-|       |   |-- schema.cypher
-|       |   \-- seed.cypher
 |       \-- types/
-|           \-- index.ts
-|
-|-- docs/
-|   |-- ARCHITECTURE.md
-|   \-- IMPLEMENTATION_PLAN.md
 |
 |-- PROJECT_STATE.md
 |-- .gitignore
@@ -185,36 +180,91 @@ LIBRARY/
 
 ---
 
-## Commands to Run in Phase 2
+## Phase 2 — Database Layer: Validation Results
 
+### Static validation (no live Neo4j connection available)
+The following checks were performed on the Cypher scripts:
+
+- [x] constraints.cypher: 13 CREATE CONSTRAINT statements, all with IF NOT EXISTS
+- [x] constraints.cypher: 7 CREATE INDEX statements, all with IF NOT EXISTS
+- [x] seed.cypher: All node creation uses MERGE (idempotent — no duplicates on re-run)
+- [x] seed.cypher: All relationship creation uses MERGE
+- [x] seed.cypher: DA2 IDs preserved: A101-A103, PUB01-PUB03, B001-B003, M001-M002, E01-E02, AD01-AD02
+- [x] seed.cypher: Loan statuses ACTIVE / RETURNED / OVERDUE all present (L001-L007)
+- [x] seed.cypher: Request statuses PENDING / APPROVED / REJECTED all present (REQ001-REQ006)
+- [x] seed.cypher: availableCopies is consistent with active loan count (see table below)
+- [x] seed.cypher: Member-Employee request pairs preserved via (Member)-[:SENT]->(Request)<-[:PROCESSED]-(Employee)
+- [x] demo-queries.cypher: Uses MATCH, OPTIONAL MATCH, WHERE, WITH, RETURN, ORDER BY, aggregation
+- [x] demo-queries.cypher: Includes 7 integrity check queries (IC01-IC07)
+- [x] demo-queries.cypher: Includes transaction simulation queries (Q19-Q21)
+
+### Book/Loan consistency table
+| Book | totalCopies | Active Loans | availableCopies set |
+|------|------------|-------------|-------------------|
+| B001 | 4 | L001, L003 = 2 | 2 CORRECT |
+| B002 | 3 | none = 0 | 3 CORRECT |
+| B003 | 5 | L004(OVERDUE), L005 = 2 | 3 CORRECT |
+| B004 | 3 | L006 = 1 | 2 CORRECT |
+| B005 | 4 | none = 0 | 4 CORRECT |
+
+NOTE: L004 has status OVERDUE. It is still an active physical loan (book not returned),
+so it reduces availableCopies. The application backend is responsible for detecting
+ACTIVE loans past their dueDate and updating status to OVERDUE.
+
+### Known limitation
+The static Cypher scripts cannot be machine-verified without a running Neo4j instance.
+The Cypher syntax follows Neo4j 5.x documentation conventions. Live verification must
+be performed by running the scripts in Neo4j Browser using IC01-IC07 in demo-queries.cypher.
+
+---
+
+## Phase 3 Must Create (Exact Order)
+
+### Step 3.1 — Root scaffolding
+1.  LIBRARY/.gitignore
+2.  LIBRARY/README.md
+
+### Step 3.2 — Backend scaffold (run from LIBRARY/)
 ```bash
-# Run from LIBRARY/ root
-
-# 1. Scaffold backend
 mkdir server
 cd server
 npm init -y
 npm install express neo4j-driver dotenv bcryptjs jsonwebtoken cors
 npm install -D typescript ts-node-dev @types/express @types/node @types/bcryptjs @types/jsonwebtoken @types/cors
 npx tsc --init
-cd ..
-
-# 2. Scaffold frontend
-mkdir client
-cd client
-npm create vite@latest . -- --template react-ts
-npm install
-npm install -D tailwindcss@3 postcss autoprefixer
-npx tailwindcss init -p
-npm install axios react-router-dom
-npm install -D @types/node
-cd ..
-
-# 3. Initialize git
-git init
-git add .
-git commit -m "Phase 1: architecture and planning documents"
 ```
+
+### Step 3.3 — Backend source files (create in this order)
+3.  LIBRARY/server/tsconfig.json      (strict: true, module: CommonJS, outDir: ./dist)
+4.  LIBRARY/server/.env.example
+5.  LIBRARY/server/src/types/index.ts (UserPayload, BookDTO, LoanDTO, RequestDTO)
+6.  LIBRARY/server/src/config/neo4j.ts (driver singleton + getSession)
+7.  LIBRARY/server/src/app.ts         (Express setup, CORS, body-parser, route stubs)
+8.  LIBRARY/server/src/server.ts      (entry point, verifyConnectivity on startup)
+9.  LIBRARY/server/src/middleware/auth.middleware.ts
+10. LIBRARY/server/src/middleware/error.middleware.ts
+11. LIBRARY/server/src/routes/auth.routes.ts
+12. LIBRARY/server/src/controllers/auth.controller.ts
+13. LIBRARY/server/src/services/auth.service.ts
+14. LIBRARY/server/src/routes/books.routes.ts
+15. LIBRARY/server/src/controllers/books.controller.ts
+16. LIBRARY/server/src/services/books.service.ts
+17. LIBRARY/server/src/routes/loans.routes.ts
+18. LIBRARY/server/src/controllers/loans.controller.ts
+19. LIBRARY/server/src/services/loans.service.ts
+20. LIBRARY/server/src/routes/requests.routes.ts
+21. LIBRARY/server/src/controllers/requests.controller.ts
+22. LIBRARY/server/src/services/requests.service.ts
+23. LIBRARY/server/src/routes/members.routes.ts
+24. LIBRARY/server/src/controllers/members.controller.ts
+25. LIBRARY/server/src/routes/admin.routes.ts
+26. LIBRARY/server/src/controllers/admin.controller.ts
+
+### Phase 3 must NOT start until:
+  - Neo4j is running locally (Desktop or Server)
+  - database/constraints.cypher applied in Neo4j Browser -> SHOW CONSTRAINTS returns 13+ rows
+  - database/seed.cypher applied in Neo4j Browser -> MATCH (n) RETURN count(n) returns 37
+  - IC01-IC04 in demo-queries.cypher all return 0 rows
 
 ---
 
@@ -227,7 +277,9 @@ git commit -m "Phase 1: architecture and planning documents"
 - [ ] POST /api/loans as Member role -> 403
 - [ ] Issue book with availableCopies = 0 -> 400
 - [ ] Issue same book to same member (active loan exists) -> 409
+- [ ] Issue book to SUSPENDED member M004 -> 403
 - [ ] Return book -> availableCopies increments, loan.status = RETURNED
+- [ ] Return already-returned loan -> 400
 - [ ] GET /api/loans/overdue -> only past-due-date active loans
 
 ### Frontend (Manual browser testing)
@@ -237,44 +289,8 @@ git commit -m "Phase 1: architecture and planning documents"
 - [ ] Admin stats page shows live database counts
 - [ ] Logout clears token and redirects to /login
 
-### Neo4j Constraint Verification (Neo4j Browser)
-```cypher
-// No negative available copies
-MATCH (b:Book) WHERE b.availableCopies < 0 RETURN b;
-// Expected: 0 rows
-
-// No orphan loan nodes
-MATCH (l:Loan) WHERE NOT ()-[:BORROWED]->(l) RETURN l;
-// Expected: 0 rows
-
-// All RETURNED loans have returnDate
-MATCH (l:Loan {status:'RETURNED'}) WHERE l.returnDate IS NULL RETURN l;
-// Expected: 0 rows
-```
-
----
-
-## Phase 2 Must Create (Exact Order)
-
-1.  LIBRARY/.gitignore
-2.  LIBRARY/README.md
-3.  LIBRARY/server/package.json   (via npm init -y)
-4.  LIBRARY/server/tsconfig.json
-5.  LIBRARY/server/.env.example
-6.  LIBRARY/server/src/config/neo4j.ts
-7.  LIBRARY/server/src/app.ts
-8.  LIBRARY/server/src/server.ts
-9.  LIBRARY/server/src/types/index.ts
-10. LIBRARY/server/src/cypher/schema.cypher
-11. LIBRARY/server/src/cypher/seed.cypher
-12. LIBRARY/client/   (via npm create vite)
-13. LIBRARY/client/tailwind.config.js  (update content paths)
-14. LIBRARY/client/src/types/index.ts
-
-Phase 2 must NOT proceed to Phase 3 until:
-  - neo4j.ts driver connects without error
-  - schema.cypher has been run in Neo4j Browser
-  - seed.cypher has been run in Neo4j Browser
-  - MATCH (n) RETURN count(n) shows > 0 in Neo4j Browser
-  - npm run dev in /server prints "Connected to Neo4j"
-  - npm run dev in /client starts Vite on port 5173
+### Neo4j Constraint Verification (use demo-queries.cypher IC01-IC07)
+- [ ] IC01: No negative available copies -> 0 rows
+- [ ] IC02: availableCopies + activeLoans = totalCopies -> 0 rows
+- [ ] IC03: No orphan Loan nodes -> 0 rows
+- [ ] IC04: No RETURNED loan missing returnDate -> 0 rows
