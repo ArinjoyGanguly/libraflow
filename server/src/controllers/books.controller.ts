@@ -23,6 +23,16 @@ export class BooksController {
     }
   }
 
+  static async getRelatedBooks(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { bookId } = req.params;
+      const result = await BooksService.getRelatedBooks(bookId);
+      sendSuccess(res, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async createBook(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const input: CreateBookInput = req.body;

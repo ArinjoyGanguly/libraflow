@@ -52,6 +52,82 @@ export interface DatabaseReadinessStatus {
   error?: string;
 }
 
+export interface DashboardStats {
+  totalBooks: number;
+  availableCopies: number;
+  totalMembers: number;
+  activeLoans: number;
+  overdueLoans: number;
+  pendingRequests: number;
+}
+
+export interface RelatedBooksResult {
+  sameAuthor: BookDTO[];
+  samePublisher: BookDTO[];
+  coBorrowed: BookDTO[];
+}
+
+/** Phase 8 — Analytics Aggregation Types */
+
+export interface PopularBook {
+  bookId: string;
+  title: string;
+  author: string;
+  genre: string;
+  totalBorrows: number;
+  currentlyAvailable: number;
+}
+
+export interface GenreStats {
+  genre: string;
+  borrowCount: number;
+  uniqueTitles: number;
+}
+
+export interface TopBorrower {
+  memberId: string;
+  name: string;
+  totalBorrows: number;
+  totalFinesPaid: number;
+}
+
+export interface LibraryStock {
+  libraryId: string;
+  libraryName: string;
+  city: string;
+  bookCount: number;
+  totalStock: number;
+  totalAvailable: number;
+  staffCount: number;
+}
+
+export interface AnalyticsResult {
+  popularBooks: PopularBook[];
+  genreStats: GenreStats[];
+  topBorrowers: TopBorrower[];
+  libraryStock: LibraryStock[];
+  overdueSnapshot: {
+    totalOverdue: number;
+    totalActiveFines: number;
+    avgDaysOverdue: number;
+  };
+}
+
+export interface RecommendedBook {
+  bookId: string;
+  title: string;
+  genre: string;
+  author: string;
+  availableCopies: number;
+  coReaderCount: number;
+}
+
+export interface MemberRecommendationsResult {
+  memberId: string;
+  memberName: string;
+  recommendations: RecommendedBook[];
+}
+
 /**
  * Pagination & Search parameters.
  */

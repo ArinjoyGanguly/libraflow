@@ -1,84 +1,175 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { BookPlus, ArrowLeft, Save } from 'lucide-react';
+import { BookPlus, ArrowLeft, Save, RefreshCw } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import { Alert } from '../components/common/Alert';
-import { SEED_BOOKS, SEED_LIBRARIES } from '../services/seedData';
+import { api } from '../services/api';
+import type { Author, Publisher, Library, CreateBookInput } from '../types';
 
 export const AddEditBookPage: React.FC = () => {
   const navigate = useNavigate();
   const { bookId } = useParams<{ bookId?: string }>();
   const isEditing = Boolean(bookId);
 
-  const [formData, setFormData] = useState(() => {
-    if (isEditing && bookId) {
-      const existing = SEED_BOOKS.find((b) => b.bookId === bookId);
-      if (existing) {
-        return {
-          bookId: existing.bookId,
-          isbn: existing.isbn,
-          title: existing.title,
-          genre: existing.genre,
-          language: existing.language,
-          edition: existing.edition || '1st',
-          year: existing.year,
-          totalCopies: existing.totalCopies,
-          authorId: existing.author?.authorId || 'A101',
-          publisherId: existing.publisher?.publisherId || 'PUB01',
-          libraryId: existing.library?.libraryId || 'LIB01',
-        };
-      }
-    }
-    return {
-      bookId: `B00${SEED_BOOKS.length + 1}`,
-      isbn: '',
-      title: '',
-      genre: 'Fiction',
-      language: 'English',
-      edition: '1st',
-      year: 2026,
-      totalCopies: 3,
-      authorId: 'A101',
-      publisherId: 'PUB01',
-      libraryId: 'LIB01',
-    };
-  });
-
+  const [isLoading, setIsLoading] = useState(isEditing);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
     text: string;
   } | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [formData, setFormData] = useState<CreateBookInput>({
+    bookId: isEditing ? bookId || '' : 'B006',
+    isbn: '',
+    title: '',
+    genre: 'Fiction',
+    language: 'English',
+    edition: '1st',
+    year: 2026,
+    totalCopies: 3,
+    authorId: '',
+    publisherId: '',
+    libraryId: '',
+  });
+
+  const [authors, setAuthors] = useState<Author[]>([]);
+  const [publishers, setPublishers] = useState<Publisher[]>([]);
+  const [libraries, setLibraries] = useState<Library[]>([]);
+
+  // Fetch relations and existing book data if editing
+  useEffect(() => {
+    let mounted = true;
+
+    const loadData = async () => {
+      try {
+        const [authorsRes, pubRes, libRes] = await Promise.all([
+          api.authors.list({ limit: 50 }).catch(() => null),
+          api.publishers.list({ limit: 50 }).catch(() => null),
+          api.libraries.list({ limit: 50 }).catch(() => null),
+        ]);
+
+        if (mounted) {
+          if (authorsRes?.success && authorsRes.data?.items) {
+            setAuthors(authorsRes.data.items);
+          }
+          if (pubRes?.success && pubRes.data?.items) {
+            setPublishers(pubRes.data.items);
+          }
+          if (libRes?.success && libRes.data?.items) {
+            setLibraries(libRes.data.items);
+          }
+        }
+
+        if (isEditing && bookId) {
+          const bookRes = await api.books.get(bookId).catch(() => null);
+          if (mounted && bookRes?.success && bookRes.data) {
+            const b = bookRes.data;
+            setFormData({
+              bookId: b.bookId,
+              isbn: b.isbn,
+              title: b.title,
+              genre: b.genre,
+              language: b.language,
+              edition: b.edition || '1st',
+              year: b.year,
+              totalCopies: b.totalCopies,
+              authorId: b.author?.authorId || 'A101',
+              publisherId: b.publisher?.publisherId || 'PUB01',
+              libraryId: b.library?.libraryId || 'LIB01',
+            });
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      mounted = false;
+    };
+  }, [isEditing, bookId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.isbn) {
-      setStatusMessage({ type: 'error', text: 'Please fill out all required fields (Title and ISBN).' });
+    if (!formData.title || !formData.isbn || !formData.bookId) {
+      setStatusMessage({ type: 'error', text: 'Please fill out all required fields (Book ID, Title, ISBN).' });
       return;
     }
 
-    setStatusMessage({
-      type: 'success',
-      text: `Book record for "${formData.title}" (${formData.bookId}) verified and validated. In Phase 7 this mutation persists to Neo4j.`,
-    });
+    setIsSubmitting(true);
+    setStatusMessage(null);
+
+    try {
+      if (isEditing && bookId) {
+        const res = await api.books.update(bookId, formData);
+        if (res.success) {
+          setStatusMessage({
+            type: 'success',
+            text: `Book "${formData.title}" (${formData.bookId}) successfully updated in database.`,
+          });
+          setTimeout(() => navigate('/books'), 1500);
+        } else {
+          setStatusMessage({
+            type: 'error',
+            text: res.error || 'Server error updating book.',
+          });
+        }
+      } else {
+        const res = await api.books.create(formData);
+        if (res.success) {
+          setStatusMessage({
+            type: 'success',
+            text: `Book "${formData.title}" (${formData.bookId}) successfully created in database.`,
+          });
+          setTimeout(() => navigate('/books'), 1500);
+        } else {
+          setStatusMessage({
+            type: 'error',
+            text: res.error || 'Server error creating book.',
+          });
+        }
+      }
+    } catch (err) {
+      setStatusMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Network error reaching API endpoint.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const authors = [
-    { value: 'A101', label: 'Ruskin Bond (A101)' },
-    { value: 'A102', label: 'Chetan Bhagat (A102)' },
-    { value: 'A103', label: 'Amish Tripathi (A103)' },
-    { value: 'A104', label: 'Arundhati Roy (A104)' },
-    { value: 'A105', label: 'R.K. Narayan (A105)' },
-  ];
+  const authorOptions =
+    authors.length > 0
+      ? authors.map((a) => ({ value: a.authorId, label: `${a.name} (${a.authorId})` }))
+      : [
+          { value: 'A101', label: 'Ruskin Bond (A101)' },
+          { value: 'A102', label: 'Chetan Bhagat (A102)' },
+          { value: 'A103', label: 'Amish Tripathi (A103)' },
+          { value: 'A104', label: 'Arundhati Roy (A104)' },
+          { value: 'A105', label: 'R.K. Narayan (A105)' },
+        ];
 
-  const publishers = [
-    { value: 'PUB01', label: 'Penguin Books India (PUB01)' },
-    { value: 'PUB02', label: 'Rupa Publications (PUB02)' },
-    { value: 'PUB03', label: 'Westland Publications (PUB03)' },
-    { value: 'PUB04', label: 'Indian Thought Publications (PUB04)' },
-  ];
+  const publisherOptions =
+    publishers.length > 0
+      ? publishers.map((p) => ({ value: p.publisherId, label: `${p.name} (${p.publisherId})` }))
+      : [
+          { value: 'PUB01', label: 'Penguin Books India (PUB01)' },
+          { value: 'PUB02', label: 'Rupa Publications (PUB02)' },
+          { value: 'PUB03', label: 'Westland Publications (PUB03)' },
+          { value: 'PUB04', label: 'Indian Thought Publications (PUB04)' },
+        ];
+
+  const libraryOptions =
+    libraries.length > 0
+      ? libraries.map((l) => ({ value: l.libraryId, label: `${l.name} (${l.libraryId})` }))
+      : [{ value: '', label: 'No libraries registered' }];
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -100,7 +191,7 @@ export const AddEditBookPage: React.FC = () => {
             </h1>
             <p className="text-xs text-slate-400">
               {isEditing
-                ? 'Update catalogue metadata and physical inventory counts'
+                ? 'Update catalog attributes and physical inventory counts'
                 : 'Create node and link relationships to Author, Publisher, and Library branch'}
             </p>
           </div>
@@ -111,126 +202,138 @@ export const AddEditBookPage: React.FC = () => {
         <Alert
           type={statusMessage.type}
           onClose={() => setStatusMessage(null)}
-          title={statusMessage.type === 'success' ? 'Validation Successful' : 'Validation Error'}
+          title={statusMessage.type === 'success' ? 'Operation Confirmed' : 'Server Validation Error'}
         >
           {statusMessage.text}
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <Card
-          title="Catalog Metadata & Relational Links"
-          subtitle="All inputs map to Neo4j Node properties and Cypher relationships"
-          footer={
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs text-slate-500 font-mono">
-                API Endpoint: {isEditing ? `PUT /api/books/${formData.bookId}` : 'POST /api/books'}
-              </span>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" size="sm" type="button" onClick={() => navigate('/books')}>
-                  Cancel
-                </Button>
-                <Button size="sm" type="submit" leftIcon={<Save className="w-4 h-4" />}>
-                  {isEditing ? 'Save Changes' : 'Register Book'}
-                </Button>
+      {isLoading ? (
+        <div className="p-12 text-center">
+          <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin mx-auto mb-2" />
+          <p className="text-xs text-slate-400">Loading book record from backend...</p>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <Card
+            title="Catalog Metadata & Relational Links"
+            subtitle="Persisted via session.withSession directly to Neo4j database"
+            footer={
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs text-slate-500 font-mono">
+                  Endpoint: {isEditing ? `PUT /api/books/${formData.bookId}` : 'POST /api/books'}
+                </span>
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" size="sm" type="button" onClick={() => navigate('/books')}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="submit"
+                    isLoading={isSubmitting}
+                    leftIcon={<Save className="w-4 h-4" />}
+                  >
+                    {isEditing ? 'Save Changes' : 'Register Book'}
+                  </Button>
+                </div>
               </div>
-            </div>
-          }
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Book ID"
-                value={formData.bookId}
-                disabled={isEditing}
-                required
-                onChange={(e) => setFormData({ ...formData, bookId: e.target.value })}
-                helperText="Unique primary identifier (e.g. B001)"
-              />
-              <Input
-                label="ISBN-13"
-                value={formData.isbn}
-                required
-                onChange={(e) => setFormData({ ...formData, isbn: e.target.value })}
-                placeholder="978-0143335001"
-              />
-            </div>
-
-            <Input
-              label="Book Title"
-              value={formData.title}
-              required
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="e.g. The Room on the Roof"
-            />
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Genre"
-                value={formData.genre}
-                required
-                onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
-              />
-              <Input
-                label="Language"
-                value={formData.language}
-                required
-                onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-              />
-              <Input
-                label="Edition"
-                value={formData.edition}
-                onChange={(e) => setFormData({ ...formData, edition: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Publication Year"
-                type="number"
-                value={formData.year}
-                required
-                onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || 2026 })}
-              />
-              <Input
-                label="Total Copies"
-                type="number"
-                min={1}
-                value={formData.totalCopies}
-                required
-                onChange={(e) => setFormData({ ...formData, totalCopies: parseInt(e.target.value) || 1 })}
-                helperText="Initial available copies equals total copies"
-              />
-            </div>
-
-            <div className="pt-2 border-t border-slate-800">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                Graph Relationship Links
+            }
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Book ID"
+                  value={formData.bookId}
+                  disabled={isEditing}
+                  required
+                  onChange={(e) => setFormData({ ...formData, bookId: e.target.value })}
+                  helperText="Unique primary identifier (e.g. B001)"
+                />
+                <Input
+                  label="ISBN-13"
+                  value={formData.isbn}
+                  required
+                  onChange={(e) => setFormData({ ...formData, isbn: e.target.value })}
+                  placeholder="978-0143335001"
+                />
               </div>
+
+              <Input
+                label="Book Title"
+                value={formData.title}
+                required
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="e.g. The Room on the Roof"
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Select
-                  label="Author (:WRITTEN_BY)"
-                  value={formData.authorId}
-                  onChange={(e) => setFormData({ ...formData, authorId: e.target.value })}
-                  options={authors}
+                <Input
+                  label="Genre"
+                  value={formData.genre}
+                  required
+                  onChange={(e) => setFormData({ ...formData, genre: e.target.value })}
                 />
-                <Select
-                  label="Publisher (:PUBLISHED_BY)"
-                  value={formData.publisherId}
-                  onChange={(e) => setFormData({ ...formData, publisherId: e.target.value })}
-                  options={publishers}
+                <Input
+                  label="Language"
+                  value={formData.language}
+                  required
+                  onChange={(e) => setFormData({ ...formData, language: e.target.value })}
                 />
-                <Select
-                  label="Library Branch (:LOCATED_AT)"
-                  value={formData.libraryId}
-                  onChange={(e) => setFormData({ ...formData, libraryId: e.target.value })}
-                  options={SEED_LIBRARIES.map((l) => ({ value: l.libraryId, label: `${l.name} (${l.libraryId})` }))}
+                <Input
+                  label="Edition"
+                  value={formData.edition || ''}
+                  onChange={(e) => setFormData({ ...formData, edition: e.target.value })}
                 />
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Publication Year"
+                  type="number"
+                  value={formData.year}
+                  required
+                  onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || 2026 })}
+                />
+                <Input
+                  label="Total Copies"
+                  type="number"
+                  min={1}
+                  value={formData.totalCopies}
+                  required
+                  onChange={(e) => setFormData({ ...formData, totalCopies: parseInt(e.target.value) || 1 })}
+                  helperText="Initial available copies equals total copies"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-800">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                  Graph Relationship Links
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Select
+                    label="Author (:WROTE)"
+                    value={formData.authorId || ''}
+                    onChange={(e) => setFormData({ ...formData, authorId: e.target.value })}
+                    options={authorOptions}
+                  />
+                  <Select
+                    label="Publisher (:PUBLISHED)"
+                    value={formData.publisherId || ''}
+                    onChange={(e) => setFormData({ ...formData, publisherId: e.target.value })}
+                    options={publisherOptions}
+                  />
+                  <Select
+                    label="Library Branch (:HELD_BY)"
+                    value={formData.libraryId || ''}
+                    onChange={(e) => setFormData({ ...formData, libraryId: e.target.value })}
+                    options={libraryOptions}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-        </Card>
-      </form>
+          </Card>
+        </form>
+      )}
     </div>
   );
 };

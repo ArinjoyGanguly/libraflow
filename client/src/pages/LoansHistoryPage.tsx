@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   History,
   Search,
   AlertCircle,
   RotateCcw,
+  RefreshCw,
 } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -13,29 +14,66 @@ import { Input } from '../components/common/Input';
 import { Select } from '../components/common/Select';
 import { Table } from '../components/common/Table';
 import { EmptyState } from '../components/common/EmptyState';
-import { SEED_LOANS } from '../services/seedData';
-import type { Loan } from '../types';
+import { Alert } from '../components/common/Alert';
+import { api } from '../services/api';
+import type { Loan, OverdueLoan } from '../types';
 
 export const LoansHistoryPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryMemberId = searchParams.get('memberId');
 
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [overdueLoans, setOverdueLoans] = useState<OverdueLoan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState(queryMemberId || '');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'OVERDUE' | 'RETURNED'>('ALL');
 
-  const filteredLoans = SEED_LOANS.filter((loan) => {
-    const matchSearch =
-      loan.loanId.toLowerCase().includes(search.toLowerCase()) ||
-      (loan.book?.title && loan.book.title.toLowerCase().includes(search.toLowerCase())) ||
-      (loan.member?.name && loan.member.name.toLowerCase().includes(search.toLowerCase())) ||
-      (loan.member?.memberId && loan.member.memberId.toLowerCase().includes(search.toLowerCase()));
+  const fetchLoans = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [loansRes, overdueRes] = await Promise.all([
+        api.loans.list({
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+          limit: 100,
+        }),
+        api.loans.overdue(),
+      ]);
 
-    const matchStatus = statusFilter === 'ALL' || loan.status === statusFilter;
-    return matchSearch && matchStatus;
+      if (loansRes.success && loansRes.data) {
+        setLoans(Array.isArray(loansRes.data) ? loansRes.data : loansRes.data.items || []);
+      } else {
+        setError(loansRes.error || 'Failed to fetch loan audit trail.');
+      }
+
+      if (overdueRes.success && overdueRes.data) {
+        setOverdueLoans(Array.isArray(overdueRes.data) ? overdueRes.data : []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error retrieving loans history.');
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchLoans();
+  }, [fetchLoans]);
+
+  const filteredLoans = loans.filter((loan) => {
+    const term = search.toLowerCase();
+    const matchId = loan.loanId.toLowerCase().includes(term);
+    const matchBook = Boolean(loan.book?.title && loan.book.title.toLowerCase().includes(term));
+    const matchMemberName = Boolean(loan.member?.name && loan.member.name.toLowerCase().includes(term));
+    const matchMemberId = Boolean(loan.member?.memberId && loan.member.memberId.toLowerCase().includes(term));
+
+    return matchId || matchBook || matchMemberName || matchMemberId;
   });
 
-  const overdueCount = SEED_LOANS.filter((l) => l.status === 'OVERDUE').length;
+  const overdueCount = overdueLoans.length;
 
   const columns = [
     {
@@ -50,8 +88,8 @@ export const LoansHistoryPage: React.FC = () => {
       header: 'Volume Title',
       render: (l: Loan) => (
         <div>
-          <div className="font-medium text-slate-100">{l.book?.title}</div>
-          <div className="text-[11px] font-mono text-slate-500">{l.book?.isbn}</div>
+          <div className="font-medium text-slate-100">{l.book?.title || 'Unknown Title'}</div>
+          <div className="text-[11px] font-mono text-slate-500">{l.book?.isbn || 'No ISBN'}</div>
         </div>
       ),
     },
@@ -60,7 +98,7 @@ export const LoansHistoryPage: React.FC = () => {
       header: 'Borrower',
       render: (l: Loan) => (
         <div>
-          <div className="text-slate-200">{l.member?.name}</div>
+          <div className="text-slate-200">{l.member?.name || 'Unknown Borrower'}</div>
           <div className="text-[11px] font-mono text-slate-500">{l.member?.memberId}</div>
         </div>
       ),
@@ -79,32 +117,36 @@ export const LoansHistoryPage: React.FC = () => {
     {
       key: 'status',
       header: 'Circulation Status',
-      render: (l: Loan) => (
-        <div className="space-y-1">
-          <Badge
-            variant={
-              l.status === 'ACTIVE'
-                ? 'success'
-                : l.status === 'OVERDUE'
-                ? 'danger'
-                : 'default'
-            }
-          >
-            {l.status}
-          </Badge>
-          {l.status === 'OVERDUE' && (
-            <div className="text-[11px] font-mono font-semibold text-rose-400">
-              18d late (${l.fineAmount.toFixed(2)})
-            </div>
-          )}
-        </div>
-      ),
+      render: (l: Loan) => {
+        const isOverdue = l.status === 'OVERDUE' || overdueLoans.some((o) => o.loanId === l.loanId);
+        const fine = l.fineAmount || 0;
+        return (
+          <div className="space-y-1">
+            <Badge
+              variant={
+                l.status === 'ACTIVE'
+                  ? 'success'
+                  : isOverdue
+                  ? 'danger'
+                  : 'default'
+              }
+            >
+              {isOverdue && l.status !== 'RETURNED' ? 'OVERDUE' : l.status}
+            </Badge>
+            {isOverdue && l.status !== 'RETURNED' && fine > 0 && (
+              <div className="text-[11px] font-mono font-semibold text-rose-400">
+                ${fine.toFixed(2)} Fine
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'issuedBy',
       header: 'Librarian Staff',
       render: (l: Loan) => (
-        <span className="text-xs text-slate-400">{l.issuedBy?.name || 'Staff'}</span>
+        <span className="text-xs text-slate-400">{l.issuedBy?.name || l.issuedBy?.employeeId || 'Staff'}</span>
       ),
     },
     {
@@ -118,7 +160,7 @@ export const LoansHistoryPage: React.FC = () => {
               variant="outline"
               size="sm"
               leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-              onClick={() => navigate('/circulation')}
+              onClick={() => navigate(`/circulation?loanId=${l.loanId}`)}
             >
               Return
             </Button>
@@ -146,11 +188,32 @@ export const LoansHistoryPage: React.FC = () => {
           {overdueCount > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-              <span>{overdueCount} Overdue Volume Detected</span>
+              <span>{overdueCount} Overdue Records Flagged</span>
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />}
+            onClick={fetchLoans}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
         </div>
       </div>
+
+      {/* Error Notice */}
+      {error && (
+        <Alert type="error" title="Loans Service Warning" onClose={() => setError(null)}>
+          <div className="flex items-center justify-between">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={fetchLoans} className="ml-4">
+              Retry
+            </Button>
+          </div>
+        </Alert>
+      )}
 
       {/* Filter and Search Bar */}
       <Card className="!p-4">
@@ -158,45 +221,42 @@ export const LoansHistoryPage: React.FC = () => {
           <div className="sm:col-span-8">
             <Input
               placeholder="Search by loan ID (L001), book title, or borrower..."
+              leftIcon={<Search className="w-4 h-4" />}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              leftIcon={<Search className="w-4 h-4" />}
             />
           </div>
-
           <div className="sm:col-span-4">
             <Select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'OVERDUE' | 'RETURNED')}
               options={[
-                { value: 'ALL', label: 'All Circulation Statuses' },
+                { value: 'ALL', label: 'All Circulation Records' },
                 { value: 'ACTIVE', label: 'Active Loans' },
-                { value: 'OVERDUE', label: 'Overdue Loans Only' },
-                { value: 'RETURNED', label: 'Returned Volumes' },
+                { value: 'OVERDUE', label: 'Overdue Loans' },
+                { value: 'RETURNED', label: 'Returned Books' },
               ]}
             />
           </div>
         </div>
       </Card>
 
-      {/* Loans Table */}
-      {filteredLoans.length === 0 ? (
+      {/* Table or States */}
+      {loading ? (
+        <div className="p-12 text-center text-slate-400 border border-slate-800 rounded-2xl bg-slate-900/40">
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
+          <p className="text-sm">Retrieving loan audit records from backend...</p>
+        </div>
+      ) : filteredLoans.length === 0 ? (
         <EmptyState
-          icon={<History className="w-8 h-8 text-slate-500" />}
-          title="No Circulation Records Found"
-          description="No loans matched your active search query or filter selection."
-          action={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearch('');
-                setStatusFilter('ALL');
-              }}
-            >
-              Reset Filters
-            </Button>
+          title="No Loan Records Found"
+          description={
+            search || statusFilter !== 'ALL'
+              ? 'No circulation records match your search criteria.'
+              : 'There are no loan transactions recorded in the database yet.'
           }
+          actionLabel="Circulate a Book"
+          onAction={() => navigate('/circulation')}
         />
       ) : (
         <Table

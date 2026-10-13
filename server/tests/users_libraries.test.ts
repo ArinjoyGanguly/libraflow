@@ -114,6 +114,22 @@ describe('Members, Staff & Libraries API (Isolated Unit Tests with Service Mocki
       expect(res.status).toBe(200);
       expect(res.body.data.items[0]).not.toHaveProperty('passwordHash');
     });
+
+    it('GET /api/admin/stats should return dashboard metrics', async () => {
+      jest.spyOn(AdminsService, 'getStats').mockResolvedValueOnce({
+        totalBooks: 19,
+        availableCopies: 14,
+        totalMembers: 4,
+        activeLoans: 4,
+        overdueLoans: 1,
+        pendingRequests: 2,
+      });
+
+      const res = await request(app).get('/api/admin/stats');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.totalBooks).toBe(19);
+    });
   });
 
   describe('Libraries API', () => {

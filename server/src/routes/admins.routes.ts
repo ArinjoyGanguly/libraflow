@@ -4,6 +4,9 @@ import { validateRequest } from '../middleware/validate.middleware';
 
 const router = Router();
 
+// GET /api/admins/stats and /api/admin/stats
+router.get('/stats', AdminsController.getStats);
+
 // GET /api/admins - list
 router.get('/', AdminsController.listAdmins);
 

@@ -4,6 +4,15 @@ import { sendSuccess } from '../utils/response';
 import { CreateAdminInput, UpdateAdminInput } from '../types';
 
 export class AdminsController {
+  static async getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const stats = await AdminsService.getStats();
+      sendSuccess(res, stats);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async listAdmins(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const result = await AdminsService.listAdmins(req.query);

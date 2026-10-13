@@ -1,7 +1,7 @@
 import neo4j from 'neo4j-driver';
 import bcrypt from 'bcryptjs';
 import { withSession } from '../config/neo4j';
-import { AdminDTO, CreateAdminInput, UpdateAdminInput, PaginationQuery, PaginatedResult } from '../types';
+import { AdminDTO, CreateAdminInput, UpdateAdminInput, PaginationQuery, PaginatedResult, DashboardStats } from '../types';
 import { NotFoundError, ConflictError } from '../utils/errors';
 import { toNative, sanitizeEntity } from '../utils/neo4j-helpers';
 
@@ -195,5 +195,48 @@ export class AdminsService {
         { adminId }
       );
     }, { accessMode: 'WRITE' });
+  }
+
+  static async getStats(): Promise<DashboardStats> {
+    return withSession(async (session) => {
+      const cypher = `
+        MATCH (b:Book)
+        WITH count(b) AS totalBooks, sum(b.availableCopies) AS totalAvailable
+        MATCH (m:Member)
+        WITH totalBooks, totalAvailable, count(m) AS totalMembers
+        OPTIONAL MATCH (l:Loan {status: 'ACTIVE'})
+        WITH totalBooks, totalAvailable, totalMembers, count(l) AS activeLoans
+        OPTIONAL MATCH (ov:Loan)
+          WHERE ov.status IN ['ACTIVE', 'OVERDUE'] AND ov.dueDate < date()
+        WITH totalBooks, totalAvailable, totalMembers, activeLoans, count(ov) AS overdueLoans
+        OPTIONAL MATCH (r:Request {status: 'PENDING'})
+        RETURN totalBooks,
+               totalAvailable,
+               totalMembers,
+               activeLoans,
+               overdueLoans,
+               count(r) AS pendingRequests
+      `;
+      const res = await session.run(cypher);
+      if (res.records.length === 0) {
+        return {
+          totalBooks: 0,
+          availableCopies: 0,
+          totalMembers: 0,
+          activeLoans: 0,
+          overdueLoans: 0,
+          pendingRequests: 0,
+        };
+      }
+      const rec = res.records[0];
+      return {
+        totalBooks: Number(toNative(rec.get('totalBooks'))) || 0,
+        availableCopies: Number(toNative(rec.get('totalAvailable'))) || 0,
+        totalMembers: Number(toNative(rec.get('totalMembers'))) || 0,
+        activeLoans: Number(toNative(rec.get('activeLoans'))) || 0,
+        overdueLoans: Number(toNative(rec.get('overdueLoans'))) || 0,
+        pendingRequests: Number(toNative(rec.get('pendingRequests'))) || 0,
+      };
+    }, { accessMode: 'READ' });
   }
 }

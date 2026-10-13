@@ -103,4 +103,17 @@ describe('Books API Endpoints (Isolated Unit Tests with Service Mocking)', () =>
     expect(res.body.success).toBe(true);
     expect(res.body.data.message).toContain('successfully deleted');
   });
+
+  it('GET /api/books/:bookId/related should return graph recommendations', async () => {
+    jest.spyOn(BooksService, 'getRelatedBooks').mockResolvedValueOnce({
+      sameAuthor: [mockBook],
+      samePublisher: [],
+      coBorrowed: [],
+    });
+
+    const res = await request(app).get('/api/books/B001/related');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.sameAuthor).toHaveLength(1);
+  });
 });

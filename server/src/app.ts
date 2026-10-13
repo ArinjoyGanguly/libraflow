@@ -15,6 +15,7 @@ import employeesRoutes from './routes/employees.routes';
 import adminsRoutes from './routes/admins.routes';
 import requestsRoutes from './routes/requests.routes';
 import loansRoutes from './routes/loans.routes';
+import analyticsRoutes from './routes/analytics.routes';
 
 const app: Application = express();
 
@@ -49,8 +50,10 @@ app.use('/api/libraries', librariesRoutes);
 app.use('/api/members', membersRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/admins', adminsRoutes);
+app.use('/api/admin', adminsRoutes);
 app.use('/api/requests', requestsRoutes);
 app.use('/api/loans', loansRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 
 // Catch 404 and forward to error handler

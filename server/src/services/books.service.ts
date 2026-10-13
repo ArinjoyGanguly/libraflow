@@ -1,6 +1,6 @@
 import neo4j from 'neo4j-driver';
 import { withSession } from '../config/neo4j';
-import { BookDTO, CreateBookInput, UpdateBookInput, PaginationQuery, PaginatedResult } from '../types';
+import { BookDTO, CreateBookInput, UpdateBookInput, PaginationQuery, PaginatedResult, RelatedBooksResult } from '../types';
 import { NotFoundError, ConflictError, BadRequestError } from '../utils/errors';
 import { toNative } from '../utils/neo4j-helpers';
 
@@ -346,5 +346,86 @@ export class BooksService {
         { bookId }
       );
     }, { accessMode: 'WRITE' });
+  }
+
+  /**
+   * Graph discovery: multi-hop traversal to retrieve related books
+   * (same author, same publisher, co-borrowed books).
+   */
+  static async getRelatedBooks(bookId: string): Promise<RelatedBooksResult> {
+    return withSession(async (session) => {
+      // Check book existence
+      const checkRes = await session.run(
+        'MATCH (b:Book {bookId: $bookId}) RETURN b',
+        { bookId }
+      );
+      if (checkRes.records.length === 0) {
+        throw new NotFoundError(`Book with ID '${bookId}' not found`);
+      }
+
+      // 1. Same author books
+      const sameAuthorRes = await session.run(
+        `MATCH (b:Book {bookId: $bookId})<-[:WROTE]-(a:Author)-[:WROTE]->(other:Book)
+         WHERE other.bookId <> $bookId
+         OPTIONAL MATCH (p:Publisher)-[:PUBLISHED]->(other)
+         OPTIONAL MATCH (other)-[:HELD_BY]->(lib:Library)
+         RETURN other,
+                { authorId: a.authorId, name: a.name } AS author,
+                { publisherId: p.publisherId, name: p.name } AS publisher,
+                { libraryId: lib.libraryId, name: lib.name } AS library
+         LIMIT 6`,
+        { bookId }
+      );
+
+      // 2. Same publisher books
+      const samePubRes = await session.run(
+        `MATCH (b:Book {bookId: $bookId})<-[:PUBLISHED]-(p:Publisher)-[:PUBLISHED]->(other:Book)
+         WHERE other.bookId <> $bookId
+         OPTIONAL MATCH (a:Author)-[:WROTE]->(other)
+         OPTIONAL MATCH (other)-[:HELD_BY]->(lib:Library)
+         RETURN other,
+                { authorId: a.authorId, name: a.name } AS author,
+                { publisherId: p.publisherId, name: p.name } AS publisher,
+                { libraryId: lib.libraryId, name: lib.name } AS library
+         LIMIT 6`,
+        { bookId }
+      );
+
+      // 3. Co-borrowed books via common members
+      const coBorrowRes = await session.run(
+        `MATCH (b:Book {bookId: $bookId})<-[:FOR_BOOK]-(:Loan)<-[:BORROWED]-(m:Member)-[:BORROWED]->(:Loan)-[:FOR_BOOK]->(other:Book)
+         WHERE other.bookId <> $bookId
+         OPTIONAL MATCH (a:Author)-[:WROTE]->(other)
+         OPTIONAL MATCH (p:Publisher)-[:PUBLISHED]->(other)
+         OPTIONAL MATCH (other)-[:HELD_BY]->(lib:Library)
+         RETURN other,
+                { authorId: a.authorId, name: a.name } AS author,
+                { publisherId: p.publisherId, name: p.name } AS publisher,
+                { libraryId: lib.libraryId, name: lib.name } AS library,
+                count(DISTINCT m) AS weight
+         ORDER BY weight DESC
+         LIMIT 6`,
+        { bookId }
+      );
+
+      const mapRecord = (rec: any): BookDTO => {
+        const other = toNative(rec.get('other'));
+        const author = toNative(rec.get('author'));
+        const publisher = toNative(rec.get('publisher'));
+        const library = toNative(rec.get('library'));
+        return {
+          ...other,
+          author: author?.authorId ? author : undefined,
+          publisher: publisher?.publisherId ? publisher : undefined,
+          library: library?.libraryId ? library : undefined,
+        };
+      };
+
+      return {
+        sameAuthor: sameAuthorRes.records.map(mapRecord),
+        samePublisher: samePubRes.records.map(mapRecord),
+        coBorrowed: coBorrowRes.records.map(mapRecord),
+      };
+    }, { accessMode: 'READ' });
   }
 }

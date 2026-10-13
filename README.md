@@ -209,7 +209,40 @@ LibraFlow exposes standardized CRUD APIs across all core entities using paramete
 | **Admins** | `/api/admins` | `GET`, `POST`, `PUT`, `DELETE` | `passwordHash` omitted |
 | **Requests** | `/api/requests` | `GET`, `POST`, `PUT`, `DELETE` | Status filtering (`PENDING`, `APPROVED`, `REJECTED`); links member, book, staff |
 | **Loans** | `/api/loans` | `POST /issue`, `POST /:id/return`, `GET /`, `GET /:id`, `GET /overdue`, `GET /members/:id/loans` | ACID transaction borrowing & returns, automatic copy count locking, overdue fine calculation |
+| **Discovery** | `/api/books/:id/related` | `GET` | Native Cypher index-free adjacency traversals (author bibliography, publisher imprint, co-borrowing) |
+| **Analytics** | `/api/analytics` | `GET`, `GET /members/:id/recommendations` | Aggregated popular books, genre statistics, patron activity, campus stock, overdue health, and 3-hop explainable recommendations |
 
-For complete request/response schemas and curl examples, see [docs/API_DOCUMENTATION.md](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/API_DOCUMENTATION.md).
+---
+
+## Frontend Setup & Execution
+
+### 1. Install Client Dependencies
+```bash
+cd client
+npm install
+```
+
+### 2. Run Frontend in Development Mode
+```bash
+npm run dev
+```
+The React SPA will start on `http://localhost:5173`. In development, Vite automatically proxies `/api` and `/health` requests to the Express server at `http://localhost:5000`.
+
+### 3. Build & Lint Frontend
+```bash
+npm run build   # Type-check and Vite production build
+npm run lint    # Run oxlint across client codebase
+```
+
+---
+
+## DA3 Submission & Demonstration Documentation
+
+- **[DA3 Final Submission Report](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/DA3_FINAL_SUBMISSION_REPORT.md)**: Comprehensive 16-section technical report detailing Oracle SQL to Neo4j migration, architecture, Cypher queries, ACID transaction rules, and evaluation results.
+- **[Viva Voce Preparation Guide](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/VIVA_PREPARATION_GUIDE.md)**: Technical Q&A guide covering index-free adjacency, ACID guarantees, Cypher optimization, and comparisons with relational databases.
+- **[Live Demonstration Checklist](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/DEMO_CHECKLIST.md)**: Verified step-by-step evaluator walk-through script.
+- **[Database Schema Reference](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/DATABASE_SCHEMA.md)**: Full graph schema, constraints, indexes, and ASCII diagrams.
+- **[API Documentation](file:///c:/Users/User/OneDrive/Desktop/LIBRARY/docs/API_DOCUMENTATION.md)**: REST endpoints and DTO contracts.
+
 
 

@@ -25,6 +25,9 @@ export const SettingsPage: React.FC = () => {
     tested: boolean;
     server: boolean;
     database: boolean;
+    uptime?: number;
+    environment?: string;
+    error?: string;
   }>({
     tested: false,
     server: false,
@@ -38,6 +41,9 @@ export const SettingsPage: React.FC = () => {
       tested: true,
       server: res.server,
       database: res.database,
+      uptime: res.uptime,
+      environment: res.environment,
+      error: res.error,
     });
     setIsTestingConn(false);
   };
@@ -154,6 +160,11 @@ export const SettingsPage: React.FC = () => {
               <p className="text-xs text-slate-400">
                 Listening route: <code className="text-slate-300">GET /health</code>
               </p>
+              {diagnosticResult.uptime !== undefined && (
+                <p className="text-[11px] text-emerald-400 mt-1 font-mono">
+                  Uptime: {Math.floor(diagnosticResult.uptime)}s • Env: {diagnosticResult.environment || 'development'}
+                </p>
+              )}
             </div>
 
             <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
@@ -175,14 +186,19 @@ export const SettingsPage: React.FC = () => {
               <p className="text-xs text-slate-400">
                 Driver target: <code className="text-slate-300">bolt://localhost:7687</code>
               </p>
+              {diagnosticResult.tested && !diagnosticResult.database && diagnosticResult.error && (
+                <p className="text-[11px] text-amber-400/90 mt-1">
+                  Note: {diagnosticResult.error}
+                </p>
+              )}
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-950/40 border border-slate-800 text-xs text-slate-400">
             <p>
-              When running Phase 6 in frontend standalone mode, seed data from{' '}
-              <code className="text-indigo-300">seed.cypher</code> is utilized for consistent UI preview.
-              In Phase 7, the frontend binds to live endpoints when the Node server and Neo4j instance are online.
+              <strong className="text-slate-200">Phase 7 Integration State:</strong> All frontend routes and pages
+              are actively bound to the Express backend APIs via the central typed API client. When the backend or Neo4j
+              is offline, the UI surfaces clear connection states and retry options without fabricating false data.
             </p>
           </div>
         </div>

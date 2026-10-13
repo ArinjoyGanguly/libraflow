@@ -7,6 +7,9 @@ const router = Router();
 // GET /api/books - list with filtering & pagination
 router.get('/', BooksController.listBooks);
 
+// GET /api/books/:bookId/related - graph discovery recommendations
+router.get('/:bookId/related', BooksController.getRelatedBooks);
+
 // GET /api/books/:bookId - detail
 router.get('/:bookId', BooksController.getBookById);
 
